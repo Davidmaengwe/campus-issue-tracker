@@ -1,11 +1,12 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
+const crypto = require('crypto');
 const db = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+const sessions = new Map();
 
 app.use(express.json());
 app.use(express.static('public'));
@@ -19,22 +20,47 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+function hashPassword(password, salt) {
+  return crypto.scryptSync(password, salt, 64).toString('hex');
+}
+
+function requireAdmin(req, res, next) {
+  const staff = sessions.get(req.headers['x-staff-token']);
+  if (!staff) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  req.staff = staff;
+  next();
+}
+
 app.get('/api/health', (req, res) => {
   res.json({ ok: true });
 });
 
+app.post('/api/staff/login', (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Missing details' });
+  }
+  const staff = db.prepare('SELECT * FROM staff WHERE username = ?').get(username);
+  if (!staff || hashPassword(password, staff.salt) !== staff.password_hash) {
+    return res.status(401).json({ error: 'Wrong username or password' });
+  }
+  const token = crypto.randomBytes(32).toString('hex');
+  sessions.set(token, { id: staff.id, name: staff.full_name });
+  res.json({ token, name: staff.full_name });
+});
 
-app.post('/api/reports',upload.single('photo'), (req, res) =>{
-    const {name, category, building, description } = req.body;
-    const photo = req.file ? req.file.filename : null;
-    const code = 'CIT-' + Math.random().toString(36).substring(2,7).toUpperCase();
+app.post('/api/reports', upload.single('photo'), (req, res) => {
+  const { name, category, building, description } = req.body;
+  const photo = req.file ? req.file.filename : null;
+  const code = 'CIT-' + Math.random().toString(36).substring(2, 7).toUpperCase();
 
+  db.prepare(
+    'INSERT INTO reports (code, name, category, building, description, photo) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(code, name, category, building, description, photo);
 
-    db.prepare(
-        'INSERT INTO  reports (code, name, category, building, description, photo)VALUES (?,?,?,?,?,?)'
-    ).run(code, name, category, building, description, photo);
-    res.json({ code});    
-
+  res.json({ code });
 });
 
 app.get('/api/reports/:code', (req, res) => {
@@ -51,36 +77,23 @@ app.get('/api/reports/:code', (req, res) => {
   res.json(row);
 });
 
-
-
-function requireAdmin(req, res, next){
-    if (req.headers['x-admin-password'] !== ADMIN_PASSWORD){
-        return res.status(401).json({error: 'Unauthorized'});
-    }
-    next();   
-}
-app.get('/api/admin/reports', requireAdmin,(req, res) => {
-    const rows = db.prepare('SELECT * FROM reports ORDER BY id DESC').all();
-    res.json(rows);
+app.get('/api/admin/reports', requireAdmin, (req, res) => {
+  const rows = db.prepare('SELECT * FROM reports ORDER BY id DESC').all();
+  res.json(rows);
 });
 
-app.patch('/api/admin/reports/:id', requireAdmin, (req, res) =>{
-    const id = req.params.id;
-    const status = req.body.status;
-    const allowed = ['Submitted', 'In Progress', 'Resolved'];
+app.patch('/api/admin/reports/:id', requireAdmin, (req, res) => {
+  const id = req.params.id;
+  const status = req.body.status;
+  const allowed = ['Submitted', 'In Progress', 'Resolved'];
 
-    if (!allowed.includes(status)){
-        return res.status(400).json({ error: 'Invalid status'});
-    }
+  if (!allowed.includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
 
-    db.prepare('UPDATE reports SET status = ? WHERE id = ?').run(status, id);
-    res.json({ok: true});
+  db.prepare('UPDATE reports SET status = ? WHERE id = ?').run(status, id);
+  res.json({ ok: true });
 });
-
-
-
-
-
 
 app.listen(PORT, () => {
   console.log('Server running on http://localhost:' + PORT);

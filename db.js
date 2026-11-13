@@ -16,4 +16,14 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS staff (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE,
+    password_hash TEXT,
+    salt TEXT,
+    full_name TEXT
+  )
+`);
+
 module.exports = db;

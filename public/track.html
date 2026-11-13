@@ -12,8 +12,7 @@
       <span class="navbar-brand">Campus Issue Tracker</span>
       <div>
         <a class="text-white me-3" href="/index.html">Report</a>
-        <a class="text-white me-3" href="/track.html">Track</a>
-        <a class="text-white" href="/admin.html">Admin</a>
+        <a class="text-white" href="/track.html">Track</a>
       </div>
     </div>
   </nav>
@@ -36,7 +35,7 @@
 
     function esc(text) {
       const div = document.createElement('div');
-      div.textContent = text;
+      div.textContent = text == null ? '' : text;
       return div.innerHTML;
     }
 
