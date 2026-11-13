@@ -151,3 +151,5 @@ vite.config.ts.timestamp-*
 
 uploads/*
 !uploads/.gitkeep
+
+reports.db
