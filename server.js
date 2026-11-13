@@ -51,6 +51,37 @@ app.get('/api/reports/:code', (req, res) => {
   res.json(row);
 });
 
+
+
+function requireAdmin(req, res, next){
+    if (req.headers['x-admin-password'] !== ADMIN_PASSWORD){
+        return res.status(401).json({error: 'Unauthorized'});
+    }
+    next();   
+}
+app.get('/api/admin/reports', requireAdmin,(req, res) => {
+    const rows = db.prepare('SELECT * FROM reports ORDER BY id DESC').all();
+    res.json(rows);
+});
+
+app.patch('/api/admin/reports/:id', requireAdmin, (req, res) =>{
+    const id = req.params.id;
+    const status = req.body.status;
+    const allowed = ['Submitted', 'In Progress', 'Resolved'];
+
+    if (!allowed.includes(status)){
+        return res.status(400).json({ error: 'Invalid status'});
+    }
+
+    db.prepare('UPDATE reports SET status = ? WHERE id = ?').run(status, id);
+    res.json({ok: true});
+});
+
+
+
+
+
+
 app.listen(PORT, () => {
   console.log('Server running on http://localhost:' + PORT);
 });
